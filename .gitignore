@@ -2,3 +2,4 @@
 build/
 build-zero/
 _deps/
+!releases/*.uf2
