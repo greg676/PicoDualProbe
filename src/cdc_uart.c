@@ -31,6 +31,10 @@
 
 #include "probe_config.h"
 
+#ifdef DEBUG_ON_ZERO
+#include "ws2812_led.h"
+#endif
+
 TaskHandle_t uart_taskhandle;
 TickType_t last_wake, interval = 100;
 volatile TickType_t break_expiry;

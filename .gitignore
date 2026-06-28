@@ -1,0 +1,4 @@
+*.uf2
+build/
+build-zero/
+_deps/

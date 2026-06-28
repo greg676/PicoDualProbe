@@ -51,6 +51,10 @@ This information includes:
 #include "probe_config.h"
 #include "probe.h"
 
+#ifdef DEBUG_ON_ZERO
+#include "led_signal.h"
+#endif
+
 /// Processor Clock of the Cortex-M MCU used in the Debug Unit.
 /// This value is used to calculate the SWD/JTAG clock speed.
 /* Debugprobe uses PIO for clock generation, so return the current system clock. */
@@ -71,7 +75,7 @@ This information includes:
 
 /// Indicate that JTAG communication mode is available at the Debug Port.
 /// This information is returned by the command \ref DAP_Info as part of <b>Capabilities</b>.
-#define DAP_JTAG                0               ///< JTAG Mode: 1 = available, 0 = not available.
+#define DAP_JTAG                1               ///< JTAG Mode: 1 = available, 0 = not available.
 
 /// Configure maximum number of JTAG devices on the scan chain connected to the Debug Access Port.
 /// This setting impacts the RAM requirements of the Debug Unit. Valid range is 1 .. 255.
@@ -90,7 +94,7 @@ This information includes:
 /// This configuration settings is used to optimize the communication performance with the
 /// debugger and depends on the USB peripheral. Typical vales are 64 for Full-speed USB HID or WinUSB,
 /// 1024 for High-speed USB HID and 512 for High-speed USB WinUSB.
-#define DAP_PACKET_SIZE         64U            ///< Specifies Packet Size in bytes.
+#define DAP_PACKET_SIZE         512U           ///< Specifies Packet Size in bytes.
 
 /// Maximum Package Buffers for Command and Response data.
 /// This configuration settings is used to optimize the communication performance with the
@@ -306,9 +310,48 @@ of the same I/O port. The following SWDIO I/O Pin functions are provided:
 Configures the DAP Hardware I/O pins for JTAG mode:
  - TCK, TMS, TDI, nTRST, nRESET to output mode and set to high level.
  - TDO to input mode.
+ 
+ PicoDualProbe: JTAG uses SIO GPIO bit-banging. SWD uses PIO.
+ When switching from SWD to JTAG, we deinit PIO and reclaim GP2/GP3 for SIO.
 */
 __STATIC_INLINE void PORT_JTAG_SETUP (void) {
-  ;
+  // Deinit PIO (releases GP2/GP3 from PIO control)
+  probe_deinit();
+  
+  // Re-init TCK (GP2) as SIO GPIO output, idle high
+  gpio_init(PROBE_PIN_SWCLK);
+  gpio_set_dir(PROBE_PIN_SWCLK, GPIO_OUT);
+  gpio_put(PROBE_PIN_SWCLK, 1);
+  
+  // Re-init TMS (GP1) as SIO GPIO output, idle high
+  // In DirtyJTAG pinout, TMS is separate from SWDIO
+#ifdef PROBE_PIN_TMS
+  gpio_init(PROBE_PIN_TMS);
+  gpio_set_dir(PROBE_PIN_TMS, GPIO_OUT);
+  gpio_put(PROBE_PIN_TMS, 1);
+#else
+  gpio_init(PROBE_PIN_SWDIO);
+  gpio_set_dir(PROBE_PIN_SWDIO, GPIO_OUT);
+  gpio_put(PROBE_PIN_SWDIO, 1);
+#endif
+  
+  // Init TDI as output, idle high
+  gpio_init(PROBE_PIN_TDI);
+  gpio_set_dir(PROBE_PIN_TDI, GPIO_OUT);
+  gpio_put(PROBE_PIN_TDI, 1);
+  
+  // Init TDO as input
+  gpio_init(PROBE_PIN_TDO);
+  gpio_set_dir(PROBE_PIN_TDO, GPIO_IN);
+  
+  // nRESET: open-drain emulation — input (Hi-Z) = released
+  gpio_init(PROBE_PIN_RESET);
+  gpio_set_dir(PROBE_PIN_RESET, GPIO_IN);
+  gpio_pull_up(PROBE_PIN_RESET);
+  
+#ifdef DEBUG_ON_ZERO
+  led_signal_set(4);  // JTAG = yellow-yellow
+#endif
 }
 
 /** Setup SWD I/O pins: SWCLK, SWDIO, and nRESET.
@@ -321,6 +364,9 @@ extern volatile uint32_t cached_delay;
 __STATIC_INLINE void PORT_SWD_SETUP (void) {
   probe_init();
   cached_delay = 0;
+#ifdef DEBUG_ON_ZERO
+  led_signal_set(3);  // SWD = green-green
+#endif
 }
 
 /** Disable JTAG/SWD I/O Pins.
@@ -333,26 +379,27 @@ __STATIC_INLINE void PORT_OFF (void) {
 
 
 // SWCLK/TCK I/O pin -------------------------------------
+// PicoDualProbe: JTAG uses SIO GPIO bit-banging (SWD uses PIO)
 
 /** SWCLK/TCK I/O pin: Get Input.
 \return Current status of the SWCLK/TCK DAP hardware I/O pin.
 */
 __STATIC_FORCEINLINE uint32_t PIN_SWCLK_TCK_IN  (void) {
-  return (0U);
+  return gpio_get(PROBE_PIN_SWCLK);
 }
 
 /** SWCLK/TCK I/O pin: Set Output to High.
 Set the SWCLK/TCK DAP hardware I/O pin to high level.
 */
 __STATIC_FORCEINLINE void     PIN_SWCLK_TCK_SET (void) {
-  ;
+  sio_hw->gpio_set = (1u << PROBE_PIN_SWCLK);
 }
 
 /** SWCLK/TCK I/O pin: Set Output to Low.
 Set the SWCLK/TCK DAP hardware I/O pin to low level.
 */
 __STATIC_FORCEINLINE void     PIN_SWCLK_TCK_CLR (void) {
-  ;
+  sio_hw->gpio_clr = (1u << PROBE_PIN_SWCLK);
 }
 
 
@@ -362,21 +409,33 @@ __STATIC_FORCEINLINE void     PIN_SWCLK_TCK_CLR (void) {
 \return Current status of the SWDIO/TMS DAP hardware I/O pin.
 */
 __STATIC_FORCEINLINE uint32_t PIN_SWDIO_TMS_IN  (void) {
-  return (0U);
+#ifdef PROBE_PIN_TMS
+  return gpio_get(PROBE_PIN_TMS);
+#else
+  return gpio_get(PROBE_PIN_SWDIO);
+#endif
 }
 
 /** SWDIO/TMS I/O pin: Set Output to High.
 Set the SWDIO/TMS DAP hardware I/O pin to high level.
 */
 __STATIC_FORCEINLINE void     PIN_SWDIO_TMS_SET (void) {
-  ;
+#ifdef PROBE_PIN_TMS
+  sio_hw->gpio_set = (1u << PROBE_PIN_TMS);
+#else
+  sio_hw->gpio_set = (1u << PROBE_PIN_SWDIO);
+#endif
 }
 
 /** SWDIO/TMS I/O pin: Set Output to Low.
 Set the SWDIO/TMS DAP hardware I/O pin to low level.
 */
 __STATIC_FORCEINLINE void     PIN_SWDIO_TMS_CLR (void) {
-  ;
+#ifdef PROBE_PIN_TMS
+  sio_hw->gpio_clr = (1u << PROBE_PIN_TMS);
+#else
+  sio_hw->gpio_clr = (1u << PROBE_PIN_SWDIO);
+#endif
 }
 
 /** SWDIO I/O pin: Get Input (used in SWD mode only).
@@ -416,14 +475,17 @@ __STATIC_FORCEINLINE void     PIN_SWDIO_OUT_DISABLE (void) {
 \return Current status of the TDI DAP hardware I/O pin.
 */
 __STATIC_FORCEINLINE uint32_t PIN_TDI_IN  (void) {
-  return (0U);
+  return gpio_get(PROBE_PIN_TDI);
 }
 
 /** TDI I/O pin: Set Output.
 \param bit Output value for the TDI DAP hardware I/O pin.
 */
 __STATIC_FORCEINLINE void     PIN_TDI_OUT (uint32_t bit) {
-  ;
+  if (bit & 1u)
+    sio_hw->gpio_set = (1u << PROBE_PIN_TDI);
+  else
+    sio_hw->gpio_clr = (1u << PROBE_PIN_TDI);
 }
 
 
@@ -433,7 +495,7 @@ __STATIC_FORCEINLINE void     PIN_TDI_OUT (uint32_t bit) {
 \return Current status of the TDO DAP hardware I/O pin.
 */
 __STATIC_FORCEINLINE uint32_t PIN_TDO_IN  (void) {
-  return (0U);
+  return gpio_get(PROBE_PIN_TDO);
 }
 
 
@@ -443,7 +505,7 @@ __STATIC_FORCEINLINE uint32_t PIN_TDO_IN  (void) {
 \return Current status of the nTRST DAP hardware I/O pin.
 */
 __STATIC_FORCEINLINE uint32_t PIN_nTRST_IN   (void) {
-  return (0U);
+  return (0U);  // Not connected on PicoDualProbe
 }
 
 /** nTRST I/O pin: Set Output.
@@ -452,7 +514,7 @@ __STATIC_FORCEINLINE uint32_t PIN_nTRST_IN   (void) {
            - 1: release JTAG TRST Test Reset.
 */
 __STATIC_FORCEINLINE void     PIN_nTRST_OUT  (uint32_t bit) {
-  ;
+  (void)bit;  // Not connected on PicoDualProbe
 }
 
 // nRESET Pin I/O------------------------------------------

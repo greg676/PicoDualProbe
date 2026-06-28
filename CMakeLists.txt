@@ -25,6 +25,7 @@ add_executable(debugprobe
         src/sw_dp_pio.c
         src/tusb_edpt_handler.c
         src/autobaud.c
+        src/led_signal.c
 )
 
 target_sources(debugprobe PRIVATE
@@ -46,6 +47,7 @@ target_compile_options(debugprobe PRIVATE -Wall)
 pico_generate_pio_header(debugprobe ${CMAKE_CURRENT_LIST_DIR}/src/probe.pio)
 pico_generate_pio_header(debugprobe ${CMAKE_CURRENT_LIST_DIR}/src/probe_oen.pio)
 pico_generate_pio_header(debugprobe ${CMAKE_CURRENT_LIST_DIR}/src/autobaud.pio)
+pico_generate_pio_header(debugprobe ${CMAKE_CURRENT_LIST_DIR}/src/ws2812.pio)
 
 target_include_directories(debugprobe PRIVATE src)
 
@@ -66,7 +68,15 @@ target_compile_definitions (debugprobe PRIVATE
 )
 
 option (DEBUG_ON_PICO "Compile firmware for the Pico instead of Debug Probe" OFF)
-if (DEBUG_ON_PICO)
+option (DEBUG_ON_ZERO "Compile firmware for Waveshare RP2040-Zero" OFF)
+if (DEBUG_ON_ZERO)
+    target_compile_definitions (debugprobe PRIVATE
+	DEBUG_ON_ZERO=1
+    )
+    set_target_properties(debugprobe PROPERTIES
+        OUTPUT_NAME "debugprobe_on_zero"
+    )
+elseif (DEBUG_ON_PICO)
     target_compile_definitions (debugprobe PRIVATE
 	DEBUG_ON_PICO=1
     )
@@ -88,6 +98,7 @@ target_link_libraries(debugprobe PRIVATE
         pico_multicore
         pico_stdlib
         pico_unique_id
+        pico_status_led
         tinyusb_device
         tinyusb_board
         hardware_pio

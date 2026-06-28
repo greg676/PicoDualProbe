@@ -47,6 +47,10 @@
 #include "DAP.h"
 #include "hardware/structs/usb.h"
 
+#ifdef DEBUG_ON_ZERO
+#include "led_signal.h"
+#endif
+
 // UART0 for debugprobe debug
 // UART1 for debugprobe to target device
 
@@ -153,6 +157,11 @@ int main(void) {
     cdc_uart_init();
     tusb_init();
     stdio_uart_init();
+
+#ifdef DEBUG_ON_ZERO
+    led_signal_init();
+    led_signal_set(1);  // ready = blue-blue
+#endif
 
     DAP_Setup();
 
