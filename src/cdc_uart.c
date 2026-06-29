@@ -31,9 +31,7 @@
 
 #include "probe_config.h"
 
-#ifdef DEBUG_ON_ZERO
-#include "ws2812_led.h"
-#endif
+// ws2812_led.h removed — LED handled by led_signal.c (DEBUG_ON_ZERO only)
 
 TaskHandle_t uart_taskhandle;
 TickType_t last_wake, interval = 100;

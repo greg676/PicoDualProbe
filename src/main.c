@@ -90,6 +90,8 @@ void dev_mon(void *ptr)
                 probe_info("Watchdog timeout! Resetting USBD\n");
                 /* uh oh, signal disconnect (implicitly resets the controller) */
                 tud_deinit(0);
+                /* Reset DAP endpoint state so it's clean on re-init */
+                dap_edpt_reset(0);
                 /* Make sure the port got the message */
                 xTaskDelayUntil(&wake, 1);
                 tud_init(0);
@@ -303,6 +305,8 @@ void tud_mount_cb(void)
 {
   probe_info("Connected, Configured: %d\n", !!was_configured);
   if (!was_configured) {
+    /* Reinitialize DAP library — clears JTAG/SWD state from previous session */
+    DAP_Setup();
     /* UART needs to preempt USB as if we don't, characters get lost */
     xTaskCreate(cdc_thread, "UART", configMINIMAL_STACK_SIZE, NULL, UART_TASK_PRIO, &uart_taskhandle);
     /* Lowest priority thread is debug - need to shuffle buffers before we can toggle swd... */
