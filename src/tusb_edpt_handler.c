@@ -106,7 +106,7 @@ char * dap_cmd_string[] = {
 };
 
 
-uint16_t dap_edpt_open(uint8_t __unused rhport, tusb_desc_interface_t const *itf_desc, uint16_t max_len)
+uint16_t dap_edpt_open(uint8_t rhport, tusb_desc_interface_t const *itf_desc, uint16_t max_len)
 {
 	// This has an *implicit return* if fails. .open() is called for each interface on the device on usb SET_CONFIGURATION(nr)
 	TU_VERIFY(TUSB_CLASS_VENDOR_SPECIFIC == itf_desc->bInterfaceClass &&
@@ -116,6 +116,7 @@ uint16_t dap_edpt_open(uint8_t __unused rhport, tusb_desc_interface_t const *itf
 	uint16_t const drv_len = sizeof(tusb_desc_interface_t) + (itf_desc->bNumEndpoints * sizeof(tusb_desc_endpoint_t));
 	TU_VERIFY(max_len >= drv_len, 0);
 	itf_num = itf_desc->bInterfaceNumber;
+	_rhport = rhport;  // store for dap_thread use
 
 	// Initialising the OUT endpoint
 
@@ -229,6 +230,12 @@ void dap_thread(void *ptr)
 					/* Need yield in a loop here, as IN callbacks will also wake the thread */
 					probe_info("DAP wait\n");
 					vTaskSuspend(dap_taskhandle);
+					/* After resume: check if buffer was reset while we were suspended.
+					   If rptr changed, the USB stack reset the endpoint — bail out. */
+					if (USBRequestBuffer.rptr != (n - 1)) {
+						probe_info("DAP buffer reset while suspended, aborting\n");
+						goto dap_thread_loop_end;
+					}
 				}
 			}
 			// Read a single packet from the USB buffer into the DAP Request buffer
@@ -270,6 +277,8 @@ void dap_thread(void *ptr)
 			}
 			xSemaphoreGive(edpt_spoon);
 		}
+		
+dap_thread_loop_end:
 	} while (1);
 }
 
