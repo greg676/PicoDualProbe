@@ -1,35 +1,82 @@
 # PicoDualProbe 🟡🟢🔵
 
-**One probe, two protocols. Debug ARM Cortex-M and RISC-V from a $5 RP2040 board.**
+*One probe. Two protocols. Five dollars.*
 
-PicoDualProbe is a CMSIS-DAP firmware fork of the [Raspberry Pi Debug Probe](https://github.com/raspberrypi/debugprobe) that adds JTAG support, WS2812 LED status signaling, and pre-built firmware for the Waveshare RP2040-Zero. It replaces a $60 Segger J-Link with a board you probably already have in your parts bin.
+[![CMSIS-DAP](https://img.shields.io/badge/CMSIS--DAP-v2-blue)](https://arm-software.github.io/CMSIS_5/DAP/html/index.html) [![RISC-V](https://img.shields.io/badge/debugs-RISC--V-4B0082)](https://riscv.org) [![ARM](https://img.shields.io/badge/debugs-ARM_Cortex--M-0091BD)](https://developer.arm.com) [![License](https://img.shields.io/badge/license-BSD--3-green)](LICENSE)
 
-## Why This Exists
+---
 
-The Segger J-Link EDU Mini bricked itself mid-debug-session. "Out of sync, resynchronizing" — unrecoverable. Rather than buy another, I built a better one.
+Your Segger J-Link just bricked itself mid-session. A new one costs $60. You've got an RP2040-Zero in your parts bin that cost $4.37.
 
-PicoDualProbe does what the Segger did (JTAG for RISC-V) **plus** SWD for ARM Cortex-M, with a color-coded LED that tells you what mode it's in before you even open a terminal.
+**This is the firmware that turns it into a better debug probe.**
 
-## What It Supports
+PicoDualProbe does SWD for ARM Cortex-M *and* JTAG for RISC-V — from the same board, with a color-coded LED that tells you what mode it's in before you even open a terminal. It's a fork of the Raspberry Pi Debug Probe firmware, hardened for dual-protocol use with real RISC-V targets.
 
-| Feature | SWD Mode | JTAG Mode |
-|---------|----------|-----------|
-| ARM Cortex-M (RP2040, STM32, SAMD21) | ✅ | — |
-| RISC-V (NeoRV32, VexRiscv, etc.) | — | ✅ |
-| OpenOCD | ✅ | ✅ |
-| GDB server (port 3333) | ✅ | ✅ |
-| UART bridge to target | ✅ | ✅ |
-| LED status signaling | ✅ | ✅ |
+```
+     ┌──────────────────────┐
+     │   🔵🔵  Ready         │
+     │   🟢🟢  SWD (ARM)     │
+     │   🟡🟡  JTAG (RISC-V) │
+     │   🔴🔴  Error         │
+     └──────────────────────┘
+     RP2040-Zero · $4.37 · USB-C
+```
 
-## Quick Start
+## What It Debugs
 
-### Option 1: Pre-built firmware (easiest)
+| Target | Protocol | Status |
+|--------|----------|--------|
+| **NeoRV32 RISC-V** (Alchitry Pt V2, XC7A100T) | JTAG | ✅ Halt, reg read, GDB, flash |
+| **RP2040** (Pico) | SWD | ✅ DPIDR 0x0bc12477, both cores |
+| **SAMD21** | SWD | ✅ Config provided |
+| Any ARM Cortex-M | SWD | ✅ Standard CMSIS-DAP |
+| Any RISC-V with JTAG DTM | JTAG | ✅ OpenOCD `riscv` target |
 
-1. Hold BOOT button, plug in the Zero
-2. Drag `releases/debugprobe_on_zero.uf2` onto the RPI-RP2 drive
-3. Done. The LED pulses blue — you're ready.
+## 30-Second Start
 
-### Option 2: Build from source
+```bash
+# 1. Flash the firmware (drag .uf2 onto RPI-RP2 drive)
+# 2. Wire it up:
+#    GP2→TCK/SWCLK  GP1→TMS/SWDIO  GP0→TDI  GP3→TDO  GND→GND
+# 3. The LED pulses blue. You're ready.
+
+# SWD — ARM target:
+openocd -f scripts/openocd/picodualprobe-swd.cfg -f target/rp2040.cfg
+
+# JTAG — RISC-V target:
+openocd -f scripts/openocd/picodualprobe-jtag.cfg -f scripts/openocd/neorv32.cfg
+```
+
+## Pinout
+
+All debug signals on one edge. Clean wiring, no spaghetti.
+
+```
+GP0  = TDI          GP12 = UART TX →
+GP1  = TMS / SWDIO  GP13 = UART RX ←
+GP2  = TCK / SWCLK  GP16 = WS2812 LED
+GP3  = TDO          GND  = Ground
+GP4  = nRESET
+```
+
+## Why Not Just Buy a J-Link?
+
+Because when a J-Link bricks (and it will), you're dead in the water waiting for shipping. A PicoDualProbe is:
+
+- **$5** vs $60 for a J-Link EDU Mini
+- **Dual protocol** — J-Link EDU is SWD only unless you pay $400+ for the Plus
+- **Repairable** — brick it? Re-flash the .uf2 in 3 seconds
+- **Visible state** — the LED tells you what's happening. J-Link gives you a blinking green dot
+- **Open source** — you can read the firmware, fix bugs, add features
+
+## Pre-built Firmware
+
+| Board | File | 
+|-------|------|
+| RP2040-Zero | [`releases/debugprobe_on_zero.uf2`](releases/debugprobe_on_zero.uf2) |
+| Standard Pico | [`releases/debugprobe_on_pico.uf2`](releases/debugprobe_on_pico.uf2) |
+
+## Build From Source
 
 ```bash
 git clone https://github.com/greg676/PicoDualProbe.git
@@ -40,126 +87,21 @@ git submodule update --init --recursive
 mkdir build-zero && cd build-zero
 cmake -DPICO_BOARD=waveshare_rp2040_zero ..
 make
-# Output: debugprobe_on_zero.uf2
-
-# For standard Pico:
-mkdir build && cd build
-cmake -DDEBUG_ON_PICO=ON ..
-make
-# Output: debugprobe_on_pico.uf2
 ```
 
-## Pinout (RP2040-Zero)
+## Known Issue
 
-All debug pins are on one edge of the board for clean wiring:
-
-```
-        ┌──────────────┐
-  GP0 ──┤ TDI           │
-  GP1 ──┤ TMS / SWDIO   │  ← shared by SWD and JTAG
-  GP2 ──┤ TCK / SWCLK   │  ← shared by SWD and JTAG
-  GP3 ──┤ TDO           │
-  GP4 ──┤ nRESET        │  ← open-drain, active-low
-  GND ──┤ GND           │
- GP12 ──┤ UART TX →     │  ← to target RX
- GP13 ──┤ UART RX ←     │  ← from target TX
- GP16 ──┤ WS2812 LED    │  ← status indicator
-        └──────────────┘
-```
-
-## LED Signal Codes
-
-The WS2812 RGB LED tells you what's happening at a glance:
-
-| Signal | Color | Meaning |
-|--------|-------|---------|
-| 🔵🔵 blue-blue | Ready | Probe idle, waiting for connection |
-| 🟢🟢 green-green | SWD | ARM Cortex-M debug active |
-| 🟡🟡 yellow-yellow | JTAG | RISC-V debug active |
-| 🔴🔴 red-red | Error | Something's wrong — check wiring |
-
-After the initial surge pulse, the LED shows two dashes of the current state color. No guessing which mode you're in.
-
-## Usage
-
-### SWD: Debug an ARM target (RP2040, STM32, etc.)
-
-```bash
-# Connect: GP2→SWCLK, GP1→SWDIO, GND→GND
-openocd -f scripts/openocd/picodualprobe-swd.cfg -f target/rp2040.cfg
-```
-
-Expected output: `DPIDR 0x0bc12477` — two Cortex-M0+ cores detected.
-
-### JTAG: Debug a RISC-V target (NeoRV32)
-
-```bash
-# Connect: GP2→TCK, GP1→TMS, GP0→TDI, GP3→TDO, GND→GND
-openocd -f scripts/openocd/picodualprobe-jtag.cfg -f scripts/openocd/neorv32.cfg
-```
-
-Expected output: `IDCODE 0x00000001`, RISC-V core examined, `misa=0x40801100`.
-
-### Full validation
-
-```bash
-./scripts/verify.sh
-```
-
-Interactive script that walks you through wiring and tests both SWD and JTAG.
-
-### JTAG with USB reset (workaround for reconnect bug)
-
-```bash
-./scripts/jtag.sh scripts/openocd/neorv32-validate.cfg
-```
-
-Resets the probe USB endpoint before and after OpenOCD to avoid the CMSIS-DAP reconnect issue.
-
-## Verified Targets
-
-| Target | Protocol | Result |
-|--------|----------|--------|
-| RP2040 (Pico) | SWD | ✅ DPIDR 0x0bc12477, both cores |
-| NeoRV32 RISC-V (Alchitry Pt V2) | JTAG | ✅ IDCODE 0x00000001, halt, reg read, GDB |
-| SAMD21 | SWD | ✅ Config provided |
-
-## Known Issue: CMSIS-DAP Reconnect
-
-The CMSIS-DAP vendor USB endpoint doesn't cleanly reset between OpenOCD sessions. First connection after plug-in works perfectly. Second connection fails with `CMD_DAP_JTAG_SEQ failed`. Third attempt kills the USB stack entirely.
-
-**Workaround:** Unplug/replug between sessions, or use `scripts/jtag.sh` which does a USB reset via `usbreset`. See `BUG-CMSIS-DAP-RECONNECT.md` for the full investigation.
-
-## Repository Structure
-
-```
-PicoDualProbe/
-├── src/
-│   ├── led_signal.c/h     ← WS2812 LED state machine
-│   ├── cdc_uart.c         ← UART bridge (modified for stability)
-│   ├── main.c             ← Dual-mode init
-│   └── ws2812.pio         ← PIO assembly for LED
-├── include/
-│   └── board_zero_config.h ← Locked RP2040-Zero pinout
-├── scripts/
-│   ├── verify.sh           ← Interactive SWD+JTAG validation
-│   ├── jtag.sh             ← JTAG wrapper with USB reset
-│   └── openocd/            ← 11 config files for various targets
-├── releases/
-│   ├── debugprobe_on_zero.uf2  ← Pre-built for RP2040-Zero
-│   └── debugprobe_on_pico.uf2  ← Pre-built for standard Pico
-└── BUG-CMSIS-DAP-RECONNECT.md  ← Deep dive on the reconnect bug
-```
+CMSIS-DAP USB endpoint doesn't cleanly reset between OpenOCD sessions. First connection works. Second fails. **Workaround:** unplug/replug, or use `scripts/jtag.sh` which does a USB reset. See [`BUG-CMSIS-DAP-RECONNECT.md`](BUG-CMSIS-DAP-RECONNECT.md).
 
 ## Companion Projects
 
-- **[NeoRV32 on Alchitry Pt V2](https://github.com/greg676/alchitry-ptv2-neorv32)** — A real RISC-V SoC in FPGA fabric. The primary JTAG target this probe was built for.
-- **[NeoRV32 MCP Server](https://claw-studio.tail708254.ts.net:3100/claw/neorv32-mcp)** — AI agent bridge for hardware debug. 15 tools, UART + JTAG, safe state machine.
+| Project | What | 
+|---------|------|
+| **[NeoRV32 on Alchitry Pt V2](https://claw-studio.tail708254.ts.net:3100/claw/alchitry-ptv2-neorv32)** | The RISC-V platform this probe was built to debug |
+| **[NeoRV32 MCP Server](https://claw-studio.tail708254.ts.net:3100/claw/neorv32-mcp)** | AI agent bridge — 15 tools for hardware control |
 
 ## Credits
 
-Built on the excellent [Raspberry Pi Debug Probe](https://github.com/raspberrypi/debugprobe) firmware. Added JTAG support, LED signaling, pre-built Zero firmware, and OpenOCD configs for RISC-V targets.
+Built on the [Raspberry Pi Debug Probe](https://github.com/raspberrypi/debugprobe) firmware. Added JTAG, LED signaling, Zero pinout, pre-built firmware, and OpenOCD configs for RISC-V.
 
-## License
-
-BSD-3-Clause (inherited from Raspberry Pi Debug Probe)
+BSD-3-Clause © 2026 Greg Jackson
