@@ -64,8 +64,8 @@ GP4  = nRESET
 Because when a J-Link bricks (and it will), you're dead in the water waiting for shipping. A PicoDualProbe is:
 
 - **$5** vs $60 for a J-Link EDU Mini
-- **Dual protocol** — J-Link EDU is SWD only unless you pay $400+ for the Plus
-- **Repairable** — brick it? Re-flash the .uf2 in 3 seconds
+- **Dual protocol** — SWD for ARM, JTAG for RISC-V. One board, both protocols.
+- **Repairable** — brick it? Re-flash the .uf2 in 3 seconds. Try that with a Segger.
 - **Visible state** — the LED tells you what's happening. J-Link gives you a blinking green dot
 - **Open source** — you can read the firmware, fix bugs, add features
 
