@@ -154,7 +154,7 @@ PicoDualProbe/
 ## Companion Projects
 
 - **[NeoRV32 on Alchitry Pt V2](https://github.com/greg676/alchitry-ptv2-neorv32)** — A real RISC-V SoC in FPGA fabric. The primary JTAG target this probe was built for.
-- **[NeoRV32 MCP Server](https://github.com/greg676/neorv32-mcp)** — AI agent bridge for hardware debug. 15 tools, UART + JTAG, safe state machine.
+- **[NeoRV32 MCP Server](https://claw-studio.tail708254.ts.net:3100/claw/neorv32-mcp)** — AI agent bridge for hardware debug. 15 tools, UART + JTAG, safe state machine.
 
 ## Credits
 
