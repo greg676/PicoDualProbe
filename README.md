@@ -1,85 +1,107 @@
-# Debugprobe
+# PicoDualProbe 🟡🟢🔵
 
-Firmware source for the Raspberry Pi Debug Probe SWD/UART accessory. Can also be run on a Raspberry Pi Pico or Pico 2.
+*One probe. Two protocols. Five dollars.*
 
-[Raspberry Pi Debug Probe product page](https://www.raspberrypi.com/products/debug-probe/)
+[![CMSIS-DAP](https://img.shields.io/badge/CMSIS--DAP-v2-blue)](https://arm-software.github.io/CMSIS_5/DAP/html/index.html) [![RISC-V](https://img.shields.io/badge/debugs-RISC--V-4B0082)](https://riscv.org) [![ARM](https://img.shields.io/badge/debugs-ARM_Cortex--M-0091BD)](https://developer.arm.com) [![License](https://img.shields.io/badge/license-BSD--3-green)](LICENSE)
 
-[Raspberry Pi Pico product page](https://www.raspberrypi.com/products/raspberry-pi-pico/)
+---
 
-[Raspberry Pi Pico 2 product page](https://www.raspberrypi.com/products/raspberry-pi-pico-2/)
+Your Segger J-Link just bricked itself mid-session. A new one costs $60. You've got an RP2040-Zero in your parts bin that cost $4.37.
 
-## Documentation
+**This is the firmware that turns it into a better debug probe.**
 
-Debug Probe documentation can be found at the [Raspberry Pi documentation](https://www.raspberrypi.com/documentation/microcontrollers/debug-probe.html#about-the-debug-probe) and in the [Getting Started with Pico PDF](https://pip.raspberrypi.com/documents/RP-008276-DS).
+PicoDualProbe does SWD for ARM Cortex-M *and* JTAG for RISC-V — from the same board, with a color-coded LED that tells you what mode it's in before you even open a terminal. It's a fork of the Raspberry Pi Debug Probe firmware, hardened for dual-protocol use with real RISC-V targets.
 
-## Hacking
-
-For the purpose of making changes or studying of the code, you may want to compile the code yourself.
-
-First, clone the repository:
-```bash
-git clone https://github.com/raspberrypi/debugprobe
-cd debugprobe
+```
+     ┌──────────────────────┐
+     │   🔵🔵  Ready         │
+     │   🟢🟢  SWD (ARM)     │
+     │   🟡🟡  JTAG (RISC-V) │
+     │   🔴🔴  Error         │
+     └──────────────────────┘
+     RP2040-Zero · $4.37 · USB-C
 ```
 
-Initialize and update the submodules:
+## What It Debugs
+
+| Target | Protocol | Status |
+|--------|----------|--------|
+| **NeoRV32 RISC-V** (Alchitry Pt V2, XC7A100T) | JTAG | ✅ Halt, reg read, GDB, flash |
+| **RP2040** (Pico) | SWD | ✅ DPIDR 0x0bc12477, both cores |
+| **SAMD21** | SWD | ✅ Config provided |
+| Any ARM Cortex-M | SWD | ✅ Standard CMSIS-DAP |
+| Any RISC-V with JTAG DTM | JTAG | ✅ OpenOCD `riscv` target |
+
+## 30-Second Start
+
 ```bash
- git submodule update --init --recursive
+# 1. Flash the firmware (drag .uf2 onto RPI-RP2 drive)
+# 2. Wire it up:
+#    GP2→TCK/SWCLK  GP1→TMS/SWDIO  GP0→TDI  GP3→TDO  GND→GND
+# 3. The LED pulses blue. You're ready.
+
+# SWD — ARM target:
+openocd -f scripts/openocd/picodualprobe-swd.cfg -f target/rp2040.cfg
+
+# JTAG — RISC-V target:
+openocd -f scripts/openocd/picodualprobe-jtag.cfg -f scripts/openocd/neorv32.cfg
 ```
 
-Then create and switch to the build directory:
-```bash
- mkdir build
- cd build
+## Pinout
+
+All debug signals on one edge. Clean wiring, no spaghetti.
+
+```
+GP0  = TDI          GP12 = UART TX →
+GP1  = TMS / SWDIO  GP13 = UART RX ←
+GP2  = TCK / SWCLK  GP16 = WS2812 LED
+GP3  = TDO          GND  = Ground
+GP4  = nRESET
 ```
 
-If your environment doesn't contain `PICO_SDK_PATH`, then either add it to your environment variables with `export PICO_SDK_PATH=/path/to/sdk` or add `-DPICO_SDK_PATH=/path/to/sdk` to the arguments to CMake below.
+## Why Not Just Buy a J-Link?
 
-Run cmake and build the code:
-```bash
- cmake ..
- make
-```
+Because when a J-Link bricks (and it will), you're dead in the water waiting for shipping. A PicoDualProbe is:
 
-Done! You should now have a `debugprobe.uf2` that you can upload to your Debug Probe via the UF2 bootloader.
+- **$5** vs $60 for a J-Link EDU Mini
+- **Dual protocol** — J-Link EDU is SWD only unless you pay $400+ for the Plus
+- **Repairable** — brick it? Re-flash the .uf2 in 3 seconds
+- **Visible state** — the LED tells you what's happening. J-Link gives you a blinking green dot
+- **Open source** — you can read the firmware, fix bugs, add features
 
-## Building for the Pico 1
+## Pre-built Firmware
 
-If you want to create the version that runs on the Pico, then you need to invoke `cmake` in the sequence above with the `DEBUG_ON_PICO=ON` option:
-```bash
-cmake -DDEBUG_ON_PICO=ON ..
-```
+| Board | File | 
+|-------|------|
+| RP2040-Zero | [`releases/debugprobe_on_zero.uf2`](releases/debugprobe_on_zero.uf2) |
+| Standard Pico | [`releases/debugprobe_on_pico.uf2`](releases/debugprobe_on_pico.uf2) |
 
-This will build with the configuration for the Pico and call the output program `debugprobe_on_pico.uf2`, as opposed to `debugprobe.uf2` for the accessory hardware.
-
-Note that if you first ran through the whole sequence to compile for the Debug Probe, then you don't need to start back at the top. You can just go back to the `cmake` step and start from there.
-
-## Building for the Pico 2
-
-If using an existing debugprobe clone:
-- You must completely regenerate your build directory, or use a different one.
-- You must also sync and update submodules.
-- `PICO_SDK_PATH` must point to a version 2.0.0 or greater install.
+## Build From Source
 
 ```bash
-git submodule sync
+git clone https://github.com/greg676/PicoDualProbe.git
+cd PicoDualProbe
 git submodule update --init --recursive
-mkdir build-pico2
-cd build-pico2
-cmake -DDEBUG_ON_PICO=1 -DPICO_BOARD=pico2 ../
+
+# For RP2040-Zero:
+mkdir build-zero && cd build-zero
+cmake -DPICO_BOARD=waveshare_rp2040_zero ..
+make
 ```
 
-This will build with the configuration for the Pico 2 and call the output program `debugprobe_on_pico2.uf2`.
+## Known Issue
 
-## AutoBaud Mode
+CMSIS-DAP USB endpoint doesn't cleanly reset between OpenOCD sessions. First connection works. Second fails. **Workaround:** unplug/replug, or use `scripts/jtag.sh` which does a USB reset. See [`BUG-CMSIS-DAP-RECONNECT.md`](BUG-CMSIS-DAP-RECONNECT.md).
 
-Mode which automatically detects and sets the UART baud rate as data arrives.
+## Companion Projects
 
-To enable AutoBaud, configure the USB CDC port to the following custom baud rate:
-```
-9728 (0x2600)
-```
-> **Note:** Some Linux serial tools cannot set custom baud values. PuTTY on Windows and any terminal that supports arbitrary baud rates works.
+| Project | What | 
+|---------|------|
+| **[NeoRV32 on Alchitry Pt V2](https://github.com/greg676/vivado_neorv32)** | The RISC-V platform this probe was built to debug |
+| **[NeoRV32 MCP Server](https://github.com/greg676/neorv32-mcp)** | AI agent bridge — 15 tools for hardware control |
 
-Changing the baud rate to any other value disables AutoBaud.
+## Credits
 
+Built on the [Raspberry Pi Debug Probe](https://github.com/raspberrypi/debugprobe) firmware. Added JTAG, LED signaling, Zero pinout, pre-built firmware, and OpenOCD configs for RISC-V.
+
+BSD-3-Clause © 2026 Greg Jackson
