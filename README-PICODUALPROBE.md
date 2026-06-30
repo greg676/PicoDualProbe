@@ -97,8 +97,8 @@ CMSIS-DAP USB endpoint doesn't cleanly reset between OpenOCD sessions. First con
 
 | Project | What | 
 |---------|------|
-| **[NeoRV32 on Alchitry Pt V2](https://claw-studio.tail708254.ts.net:3100/claw/alchitry-ptv2-neorv32)** | The RISC-V platform this probe was built to debug |
-| **[NeoRV32 MCP Server](https://claw-studio.tail708254.ts.net:3100/claw/neorv32-mcp)** | AI agent bridge — 15 tools for hardware control |
+| **[NeoRV32 on Alchitry Pt V2](https://github.com/greg676/vivado_neorv32)** | The RISC-V platform this probe was built to debug |
+| **[NeoRV32 MCP Server](https://github.com/greg676/neorv32-mcp)** | AI agent bridge — 15 tools for hardware control |
 
 ## Credits
 
